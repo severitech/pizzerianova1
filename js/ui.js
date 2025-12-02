@@ -191,7 +191,7 @@ export const addressDetailsInput = document.getElementById("address-details");
 import { tg } from "./telegram.js";
 console.debug("tg in ui:", tg);
 // import { fetchProducts } from "./data.js";
-import { cart, myOrders, currentRestaurantRating, currentDeliveryRating } from "./state.js";
+import { cart, myOrders } from "./state.js";
 
 // Helpers para compatibilidad entre versiones y mocks
 const MB = tg && (tg.MainButton || tg.mainButton || tg.main_button || null);
@@ -1043,7 +1043,10 @@ export function showRateDriverPage(orderId) {
     star.classList.remove("selected");
   });
   
-  // Limpiar comentarios
-  const commentsField = document.getElementById("rating-comments");
-  if (commentsField) commentsField.value = "";
+  // Limpiar comentarios (ambos campos)
+  const restaurantCommentsField = document.getElementById("rating-restaurant-comments");
+  if (restaurantCommentsField) restaurantCommentsField.value = "";
+  
+  const deliveryCommentsField = document.getElementById("rating-delivery-comments");
+  if (deliveryCommentsField) deliveryCommentsField.value = "";
 }

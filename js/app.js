@@ -2525,7 +2525,20 @@ export function init() {
     const orderId = e.currentTarget.dataset.orderId;
     const restaurantRating = window.currentRestaurantRating || 0;
     const deliveryRating = window.currentDeliveryRating || 0;
-    const comments = document.getElementById("rating-comments").value.trim();
+    
+    // Leer comentarios separados
+    const restaurantComments = document.getElementById("rating-restaurant-comments")?.value.trim() || "";
+    const deliveryComments = document.getElementById("rating-delivery-comments")?.value.trim() || "";
+    
+    // Combinar comentarios si ambos existen
+    let combinedComment = "";
+    if (restaurantComments && deliveryComments) {
+      combinedComment = `Restaurante: ${restaurantComments} | Delivery: ${deliveryComments}`;
+    } else if (restaurantComments) {
+      combinedComment = `Restaurante: ${restaurantComments}`;
+    } else if (deliveryComments) {
+      combinedComment = `Delivery: ${deliveryComments}`;
+    }
 
     // Validación: ambas calificaciones son obligatorias
     if (restaurantRating === 0 || deliveryRating === 0) {
@@ -2552,8 +2565,12 @@ export function init() {
         order_id: orderId,
         restaurant_rating: restaurantRating,
         delivery_rating: deliveryRating,
-        comment: comments || undefined, // Solo enviar si hay comentario
+        comment: combinedComment || undefined, // Solo enviar si hay comentario
       };
+
+      console.log("📤 ENVIANDO CALIFICACIÓN AL BACKEND:");
+      console.log("URL:", `${BACKEND_URL}/api/rate_order`);
+      console.log("Payload:", JSON.stringify(payload, null, 2));
 
       const response = await fetch(`${BACKEND_URL}/api/rate_order`, {
         method: "POST",
@@ -2561,14 +2578,20 @@ export function init() {
         body: JSON.stringify(payload),
       });
 
+      console.log("📥 RESPUESTA DEL BACKEND:");
+      console.log("Status:", response.status);
+      console.log("Status Text:", response.statusText);
+
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
+        console.error("❌ ERROR DEL BACKEND:", errorData);
         throw new Error(
           errorData.message || `Error ${response.status}: No se pudo enviar la calificación`
         );
       }
 
       const result = await response.json();
+      console.log("✅ RESPUESTA EXITOSA:", result);
 
       // Marcar pedido como calificado en el estado local
       const order = myOrders.find((o) => o.id == orderId);
@@ -2615,6 +2638,28 @@ export function init() {
         const mb = tg && (tg.mainButton || tg.MainButton);
         if (mb && typeof mb.hideProgress === "function") mb.hideProgress();
       } catch (e) {}
+    }
+  });
+
+  // Event listener para los chips de sugerencias
+  document.addEventListener("click", (e) => {
+    const chip = e.target.closest(".suggestion-chip");
+    if (chip) {
+      const text = chip.dataset.text;
+      const restaurantCommentsField = document.getElementById("rating-restaurant-comments");
+      if (restaurantCommentsField && text) {
+        const currentValue = restaurantCommentsField.value.trim();
+        if (currentValue) {
+          // Si ya hay texto, agregar con separador
+          restaurantCommentsField.value = currentValue + ". " + text;
+        } else {
+          // Si está vacío, solo agregar el texto
+          restaurantCommentsField.value = text;
+        }
+        // Hacer focus en el campo para que el usuario vea el cambio
+        restaurantCommentsField.focus();
+      }
+    }
   });
 
   btnGeneratePizza.addEventListener("click", callBackendToCreatePizza);

@@ -1,4 +1,5 @@
 import { tg } from "./telegram.js";
+import "./firebase-config.js";
 
 import {
   cart,

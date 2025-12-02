@@ -795,6 +795,12 @@ export async function showOrderTrackingPage(orderId) {
       if (!resp.ok) throw new Error("No se pudo obtener el pedido");
       const order = await resp.json();
 
+      // Merge local state (isRated) if available
+      const localOrder = (window.myOrders || []).find(o => String(o.id) === String(orderId));
+      if (localOrder && localOrder.isRated) {
+          order.isRated = true;
+      }
+
       // Actualizar número y dataset
       const trackingNumEl = document.getElementById("tracking-order-number");
       if (trackingNumEl) trackingNumEl.textContent = order.id || "-";
@@ -919,16 +925,30 @@ export async function showOrderTrackingPage(orderId) {
         showStatusBanner(`Estado actualizado: ${s}`, "bg-green-600");
       lastOrderStatus = s;
 
-      // Si entregado, detener polling
+      // Si entregado, detener polling y mostrar botón de valorar (si no está valorado)
       if (/entregado/i.test(s)) {
         try {
           if (trackingInterval) {
             clearInterval(trackingInterval);
             trackingInterval = null;
           }
-          try {
-            btnRateOrder.classList.remove("hidden");
-          } catch (e) {}
+          
+          const btnRate = document.getElementById("btn-rate-order");
+          const msgThankYou = document.getElementById("rating-thank-you-msg");
+
+          if (order.isRated) {
+            // Si ya está valorado, ocultar botón y mostrar mensaje
+            if (btnRate) btnRate.classList.add("hidden");
+            if (msgThankYou) msgThankYou.classList.remove("hidden");
+            
+            // Limpiar badge antiguo si existiera
+            const oldBadge = document.getElementById("rated-message-badge");
+            if (oldBadge) oldBadge.remove();
+          } else {
+            // Si no está valorado, mostrar botón
+            if (btnRate) btnRate.classList.remove("hidden");
+            if (msgThankYou) msgThankYou.classList.add("hidden");
+          }
         } catch (e) {}
       }
     } catch (e) {

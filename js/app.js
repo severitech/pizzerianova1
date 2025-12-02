@@ -1069,6 +1069,7 @@ function createOverlay(html) {
 // Poll an order state from backend for a limited time and update UI
 async function pollOrderStatus(orderId, durationMs = 30000, intervalMs = 5000) {
   if (!orderId) return;
+  orderId = String(orderId).trim();
   const endAt = Date.now() + durationMs;
   let lastStatus = null;
 
@@ -2562,7 +2563,7 @@ export function init() {
     try {
       // Enviar calificación al backend
       const payload = {
-        order_id: orderId,
+        order_id: String(orderId).trim(), // CRÍTICO: .trim() para evitar error 404
         restaurant_rating: restaurantRating,
         delivery_rating: deliveryRating,
         comment: combinedComment || undefined, // Solo enviar si hay comentario
@@ -2580,8 +2581,7 @@ export function init() {
 
       console.log("📥 RESPUESTA DEL BACKEND:");
       console.log("Status:", response.status);
-      console.log("Status Text:", response.statusText);
-
+      
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         console.error("❌ ERROR DEL BACKEND:", errorData);
@@ -2599,14 +2599,19 @@ export function init() {
         order.isRated = true;
         order.restaurant_rating = restaurantRating;
         order.delivery_rating = deliveryRating;
-        order.rating_comment = comments;
+        order.rating_comment = combinedComment;
         saveOrdersToStorage();
       }
 
       // Resetear calificaciones para la próxima vez
       window.currentRestaurantRating = 0;
       window.currentDeliveryRating = 0;
-      document.getElementById("rating-comments").value = "";
+      
+      // Limpiar campos de comentarios
+      const rComments = document.getElementById("rating-restaurant-comments");
+      if (rComments) rComments.value = "";
+      const dComments = document.getElementById("rating-delivery-comments");
+      if (dComments) dComments.value = "";
 
       // Feedback exitoso
       try {
@@ -2664,6 +2669,25 @@ export function init() {
 
   btnGeneratePizza.addEventListener("click", callBackendToCreatePizza);
 
+  // --- WELCOME PAGE BUTTONS ---
+  const localBtnStartOrder = document.getElementById("btn-start-order");
+  const localBtnMyOrders = document.getElementById("btn-my-orders");
+
+  if (localBtnStartOrder) {
+    localBtnStartOrder.addEventListener("click", () => {
+      showCategoriesPage();
+    });
+  }
+
+  if (localBtnMyOrders) {
+    localBtnMyOrders.addEventListener("click", () => {
+      showMyOrdersPage();
+    });
+  }
+
   window.addEventListener("load", handleHashChange);
   window.addEventListener("hashchange", handleHashChange);
 }
+
+// Inicializar la aplicación
+document.addEventListener("DOMContentLoaded", init);

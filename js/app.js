@@ -4,7 +4,8 @@ import "./firebase-config.js";
 import {
   cart,
   myOrders,
-  currentRating,
+  currentRestaurantRating,
+  currentDeliveryRating,
   userLocation,
   userChatId,
   setUserLocation,
@@ -89,7 +90,6 @@ import {
   btnRateOrder,
   pageRateDriver,
   ratingOrderId,
-  ratingStarsContainer,
   btnSubmitRating,
   btnMyOrders,
   btnBack,
@@ -1859,7 +1859,37 @@ async function handleHashChange() {
   if (params.get("chat_id")) {
     window.userChatId = params.get("chat_id");
   }
+  
   await loadOrdersFromBackend();
+  
+  // NUEVA FUNCIONALIDAD: Detectar si viene de un botón de Telegram para calificar
+  const action = params.get("action");
+  const orderId = params.get("order_id");
+  
+  if (action === "rate" && orderId) {
+    // Auto-redirigir a la página de calificación para este pedido
+    try {
+      console.log(`Auto-navegando a calificación de pedido: ${orderId}`);
+      // Primero mostrar la página de mis pedidos para cargar el contexto
+      await showMyOrdersPage();
+      // Luego esperar un tick y navegar a la página de calificación
+      setTimeout(() => {
+        try {
+          showRateDriverPage(orderId);
+          // Limpiar los parámetros de la URL para evitar bucles
+          const newUrl = window.location.origin + window.location.pathname;
+          window.history.replaceState({}, document.title, newUrl);
+        } catch (e) {
+          console.error("Error al navegar a calificación:", e);
+        }
+      }, 300);
+    } catch (e) {
+      console.error("Error en auto-navegación a calificación:", e);
+      showWelcomePage();
+    }
+    return;
+  }
+  
   const hash = window.location.hash;
   if (hash === "#mis-pedidos") {
     showMyOrdersPage();
@@ -1869,6 +1899,10 @@ async function handleHashChange() {
 }
 
 export function init() {
+  // Inicializar variables globales para calificaciones
+  window.currentRestaurantRating = 0;
+  window.currentDeliveryRating = 0;
+  
   const btnStartOrder = document.getElementById("btn-start-order");
   const btnMyOrders = document.getElementById("btn-my-orders");
   // ... otros si es necesario
@@ -2453,43 +2487,134 @@ export function init() {
     showTrackingMap(order);
   };
 
-  ratingStarsContainer.addEventListener("click", (e) => {
-    const star = e.target.closest("span");
-    if (star) {
-      currentRating = parseInt(star.dataset.value, 10);
-      document.querySelectorAll(".rating-stars span").forEach((s) => {
-        s.classList.toggle(
-          "selected",
-          parseInt(s.dataset.value, 10) <= currentRating
-        );
-      });
-    }
-  });
+  // Event listeners para las estrellas de RESTAURANTE
+  const restaurantStarsContainer = document.getElementById("rating-restaurant-stars");
+  if (restaurantStarsContainer) {
+    restaurantStarsContainer.addEventListener("click", (e) => {
+      const star = e.target.closest("span");
+      if (star) {
+        window.currentRestaurantRating = parseInt(star.dataset.value, 10);
+        restaurantStarsContainer.querySelectorAll("span").forEach((s) => {
+          s.classList.toggle(
+            "selected",
+            parseInt(s.dataset.value, 10) <= window.currentRestaurantRating
+          );
+        });
+      }
+    });
+  }
 
-  btnSubmitRating.addEventListener("click", (e) => {
+  // Event listeners para las estrellas de DELIVERY
+  const deliveryStarsContainer = document.getElementById("rating-delivery-stars");
+  if (deliveryStarsContainer) {
+    deliveryStarsContainer.addEventListener("click", (e) => {
+      const star = e.target.closest("span");
+      if (star) {
+        window.currentDeliveryRating = parseInt(star.dataset.value, 10);
+        deliveryStarsContainer.querySelectorAll("span").forEach((s) => {
+          s.classList.toggle(
+            "selected",
+            parseInt(s.dataset.value, 10) <= window.currentDeliveryRating
+          );
+        });
+      }
+    });
+  }
+
+  btnSubmitRating.addEventListener("click", async (e) => {
     const orderId = e.currentTarget.dataset.orderId;
-    const order = myOrders.find((o) => o.id == orderId);
+    const restaurantRating = window.currentRestaurantRating || 0;
+    const deliveryRating = window.currentDeliveryRating || 0;
+    const comments = document.getElementById("rating-comments").value.trim();
 
-    if (currentRating === 0) {
-      tg.showAlert(
-        "Valoración Incompleta",
-        "Por favor, selecciona al menos una estrella."
-      );
+    // Validación: ambas calificaciones son obligatorias
+    if (restaurantRating === 0 || deliveryRating === 0) {
+      try {
+        tg.showAlert(
+          "Valoración Incompleta",
+          "Por favor, califica tanto el restaurante como el repartidor."
+        );
+      } catch (e) {
+        alert("Por favor, califica tanto el restaurante como el repartidor.");
+      }
       return;
     }
 
-    if (order) {
-      order.isRated = true;
-      saveOrdersToStorage();
-    }
+    // Mostrar indicador de carga
+    try {
+      const mb = tg && (tg.mainButton || tg.MainButton);
+      if (mb && typeof mb.showProgress === "function") mb.showProgress(true);
+    } catch (e) {}
 
-    tg.HapticFeedback.notificationOccurred("success");
-    tg.showAlert(
-      "¡Gracias!",
-      "Tu valoración ha sido enviada. ¡Apreciamos tu feedback!"
-    );
+    try {
+      // Enviar calificación al backend
+      const payload = {
+        order_id: orderId,
+        restaurant_rating: restaurantRating,
+        delivery_rating: deliveryRating,
+        comment: comments || undefined, // Solo enviar si hay comentario
+      };
 
-    showMyOrdersPage();
+      const response = await fetch(`${BACKEND_URL}/api/rate_order`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(
+          errorData.message || `Error ${response.status}: No se pudo enviar la calificación`
+        );
+      }
+
+      const result = await response.json();
+
+      // Marcar pedido como calificado en el estado local
+      const order = myOrders.find((o) => o.id == orderId);
+      if (order) {
+        order.isRated = true;
+        order.restaurant_rating = restaurantRating;
+        order.delivery_rating = deliveryRating;
+        order.rating_comment = comments;
+        saveOrdersToStorage();
+      }
+
+      // Resetear calificaciones para la próxima vez
+      window.currentRestaurantRating = 0;
+      window.currentDeliveryRating = 0;
+      document.getElementById("rating-comments").value = "";
+
+      // Feedback exitoso
+      try {
+        tg.HapticFeedback.notificationOccurred("success");
+      } catch (e) {}
+
+      try {
+        tg.showAlert(
+          "¡Gracias!",
+          result.message || "Tu valoración ha sido enviada. ¡Apreciamos tu feedback!"
+        );
+      } catch (e) {
+        alert("¡Gracias! Tu valoración ha sido enviada correctamente.");
+      }
+
+      showMyOrdersPage();
+    } catch (error) {
+      console.error("Error al enviar calificación:", error);
+      try {
+        tg.showAlert(
+          "Error",
+          `No pudimos enviar tu calificación. ${error.message}`
+        );
+      } catch (e) {
+        alert(`Error: No pudimos enviar tu calificación. ${error.message}`);
+      }
+    } finally {
+      try {
+        const mb = tg && (tg.mainButton || tg.MainButton);
+        if (mb && typeof mb.hideProgress === "function") mb.hideProgress();
+      } catch (e) {}
   });
 
   btnGeneratePizza.addEventListener("click", callBackendToCreatePizza);

@@ -191,7 +191,7 @@ export const addressDetailsInput = document.getElementById("address-details");
 import { tg } from "./telegram.js";
 console.debug("tg in ui:", tg);
 // import { fetchProducts } from "./data.js";
-import { cart, myOrders, currentRating } from "./state.js";
+import { cart, myOrders, currentRestaurantRating, currentDeliveryRating } from "./state.js";
 
 // Helpers para compatibilidad entre versiones y mocks
 const MB = tg && (tg.MainButton || tg.mainButton || tg.main_button || null);
@@ -1027,9 +1027,23 @@ export function showRateDriverPage(orderId) {
   else ratingOrderId.textContent = `Pedido #${orderId}`;
   btnSubmitRating.dataset.orderId = orderId;
 
-  currentRating = 0;
-  document.querySelectorAll(".rating-stars span").forEach((star) => {
+  // Resetear ambas calificaciones (restaurante y delivery)
+  window.currentRestaurantRating = 0;
+  window.currentDeliveryRating = 0;
+  
+  // Limpiar estrellas del restaurante
+  const restaurantStars = document.querySelectorAll("#rating-restaurant-stars span");
+  restaurantStars.forEach((star) => {
     star.classList.remove("selected");
   });
-  document.getElementById("rating-comments").value = "";
+  
+  // Limpiar estrellas del delivery
+  const deliveryStars = document.querySelectorAll("#rating-delivery-stars span");
+  deliveryStars.forEach((star) => {
+    star.classList.remove("selected");
+  });
+  
+  // Limpiar comentarios
+  const commentsField = document.getElementById("rating-comments");
+  if (commentsField) commentsField.value = "";
 }
